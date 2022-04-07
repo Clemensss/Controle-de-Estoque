@@ -24,14 +24,25 @@ def queryAllDict(obj):
 def queryPacientes():
     queryAllDict(Paciente)
 
-@db_session
-def addMed(nome, quan, arma='caixa', dosagem='1 mg',preco=0):
-    q = Medicamento.get(nome=nome)
-    if(q): return q
-    return Medicamento(nome=nome, quan=quan, arma=arma, dosagem=dosagem,preco=preco)
+#------------------- adding elements -------------
 
 @db_session
-def addPac(nome, sobrenome, cpf, info=''):
+def addMedicamento(nome):
+    q = Medicamento.get(nome=nome)
+    if(q == None): return Medicamento(nome=nome)
+    return q
+
+@db_session
+def addEstocagem(medicamento, nome, dose, ratio):
+    return Estocagem(
+        medicamento=medicamento, 
+        nomeEstoque=nome, 
+        nomeDose=dose, 
+        ratioEstoque=ratio[0],
+        ratioDose=ratio[1])
+
+@db_session
+def addPaciente(nome, sobrenome, cpf, info=''):
     q = Paciente.get(nome=nome, sobrenome=sobrenome)
     if(q): return q
     return Paciente(nome=nome, sobrenome=sobrenome, cpf=cpf, info=info)

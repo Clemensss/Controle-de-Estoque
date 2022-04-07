@@ -26,7 +26,6 @@ def printDBDict(obj):
 #------------------- editing element -------------
 #def editObj(obj, change, field):
  #   q = obj.
-#------------------- adding elements -------------
 
 #-------------------------- DATA BASE ------------------------
 class Medicamento(db.Entity):
@@ -55,13 +54,13 @@ class Estocagem(db.Entity):
     ratioDose    = Required(int)
 
     #quantidade de items 
-    nomeEstoque = Required(str, default='caixa')
-    estoque = Required(int)
+    nomeEstoque = Required(str)
+    estoque = Required(int, default=0)
     precoPorEstoque = Required(int)
 
     #quantidade de dosagem
     nomeDose = Required(str)
-    quantidadeDoses = Required(int)
+    quantidadeDoses = Required(int, default=0)
 
     @property
     def ratio(self):
