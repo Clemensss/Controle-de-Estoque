@@ -21,9 +21,7 @@ def printDBDict(obj):
     else: pdict(obj)
         
 
-#-----------------queries --------------------------------------------
  
-#------------------- editing element -------------
 #def editObj(obj, change, field):
  #   q = obj.
 
@@ -36,7 +34,6 @@ class Medicamento(db.Entity):
     entrada   = Set(lambda: Entrada)
     saida     = Set(lambda: Saida)
 
-    @property
     def medicamentoDict(self):
         return {
                 'nome': self.nome,
@@ -56,16 +53,11 @@ class Estocagem(db.Entity):
     #quantidade de items 
     nomeEstoque = Required(str)
     estoque = Required(int, default=0)
-    precoPorEstoque = Required(int)
+    precoPorEstoque = Optional(int)
 
     #quantidade de dosagem
     nomeDose = Required(str)
-    quantidadeDoses = Required(int, default=0)
-
-    @property
-    def ratio(self):
-        return {'estoque': self.ratioEstoque,
-                'dosagem': self.ratioDose}
+    doses = Required(int, default=0)
 
 class Paciente(db.Entity):
     nome = Required(str)
@@ -76,12 +68,9 @@ class Paciente(db.Entity):
 
     @property
     def nomeCompleto(self):
-        return ('{} {}, cpf: {}'.format(
-                                self.nome, 
-                                self.sobrenome,
-                                self.cpf))
+        return ('{} {}'.format(self.nome, 
+                              self.sobrenome))
 
-    @property
     def pacienteDict(self):
         return {
             'nome': self.nomeCompleto, 
@@ -94,30 +83,33 @@ class Saida(db.Entity):
     id = PrimaryKey(int, auto=True)
     med = Set(Medicamento)
     pac = Required(Paciente)
-    quan = Required(int)
+    dosesTipo = Required(str)
+    doses = Required(int)
     data = Required(datetime)
 
-    @property
     def saidaDict(self):
         return {
                 'medicamento' : self.med.medicamentoDict,
                 'paciente'    : self.pac.pacienteDict,
-                'quantindade' : self.quan,
-                'data' : self.date
+                'dosesTipo'   : self.dosesTipo,
+                'doses'       : self.doses,
+                'data'        : self.date
             }
 
 class Entrada(db.Entity):
     id = PrimaryKey(int, auto=True)
-    quan = Required(int)
-    med = Set(Medicamento)
+    med = Required(Medicamento)
+    estoqueTipo = Required(str)
+    estoque = Required(int)
     data = Required(datetime)
 
-    @property
     def entradaDict(self):
+
         return {
-                'quan' : self.quan,
-                'med' : self.med.medicamentoDict,
-                'data' : self.date
+                'estoqueTipo':self.estoqueTipo,
+                'estoque' : self.estoque,
+                'med'     : self.med.medicamentoDict(),
+                'data'    : self.data
             }
 
 #functions that return single element queries
