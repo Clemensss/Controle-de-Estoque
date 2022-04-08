@@ -22,41 +22,82 @@ def populate():
 
     for i in range(10):
         addEntrada(
-            med[random.randint(0, len(med)-1)],
+            random.randint(1, len(med)),
             random.randint(10, 30)
         )
 
 #-----------------queries --------------------------------------------
+#abstractions
 @db_session
-def queryAllToDict(obj, wc=False, ro=False):
-    all = []
-    for q in select(p for p in obj)[:]:
-        print(q.to_dict(with_collections=wc, related_objects=ro))
-    return all
+def changeName(d, *args):
+    for el in args:
+        d[el] = d[el].name
+    return d
 
+@db_session
+def queryAll(obj, order=None):
+    return select(p for p in obj).order_by(order)[:]
+
+#this is surely the dumbest thing ive ever done but it was a lot of fun and tendinitis
+#creates dicts from queries, substitus name of entity when asked
+@db_session
+def changeNameDict(change, queryDict, field, objclass):
+    for d in change:
+        objIdQuery, objClass = queryDict[d[field]], d[objclass]
+
+        obj = objClass.get(id=objIdQuery) #query
+        queryDict[d[field]] = obj.name    #changes name
+    return queryDict
+
+@db_session
+def queryAllToDict(obj, order=None, change=None):
+        arr = []
+        query = queryAll(obj, order)
+        for q in query:
+            queryDict = q.to_dict(with_collections=(change != None))
+            if(change!= None): 
+                queryDict = changeNameDict(change, queryDict, 'field', 'objClass')
+            arr.append(queryDict)
+        return arr
+
+#change field obj to str with the name
+by_date = lambda o : o.data
+
+#queries
+#thats also the reason i made all those super complicated functions, so it looks nice
 qAllMed = lambda : queryAllToDict(Medicamento)
 qAllPac = lambda : queryAllToDict(Paciente)
-qAllEnt = lambda : queryAllToDict(Entrada, wc=True,ro=True)
-qAllSai = lambda : queryAllToDict(Saida,wc=True,ro=True)
+
+changeMedName = {'objClass': Medicamento, 'field' : 'med'}
+changePacName = {'objClass': Paciente,    'field' : 'pac'}
+qAllEnt = lambda : queryAllToDict(Entrada, order=by_date, change=[changeMedName])
+qAllSai = lambda : queryAllToDict(Saida,   order=by_date, change=[changeMedName,changePacName])
 
 #------------------- editing elements -------------
 @db_session
-def editObj(obj, field, edit):
-    obj.set({field:edit})
+def editObj(obj, id, field, edit):
+    o = obj.get(id=id)
+    if(type(field) != str or o == None): return False
+    d = {field:edit}
+    o.set(**d)
+    return True
 
-eMedObj = lambda field, edit: editObj(Medicamento, field, edit)
-ePacObj = lambda field, edit: editObj(Paciente, field, edit)
-eEntObj = lambda field, edit: editObj(Entrada,  field, edit)
-eSaiObj = lambda field, edit: editObj(Saida,    field, edit) 
+eMedObj = lambda id, field, edit: editObj(Medicamento,id, field, edit)
+ePacObj = lambda id, field, edit: editObj(Paciente,   id, field, edit)
+eEntObj = lambda id, field, edit: editObj(Entrada,    id, field, edit)
+eSaiObj = lambda id, field, edit: editObj(Saida,      id, field, edit) 
 #------------------- deleting elements -------------
 @db_session
-def delObj(obj):
-    obj.delete()
+def delObj(obj,id):
+    o = obj.get(id=id)
+    if(o == None): return False
+    o.delete()
+    return True
 
-eMedObj = lambda field, edit: editObj(Medicamento, field, edit)
-ePacObj = lambda field, edit: editObj(Paciente, field, edit)
-eEntObj = lambda field, edit: editObj(Entrada,  field, edit)
-eSaiObj = lambda field, edit: editObj(Saida,    field, edit) 
+dMedObj = lambda id: delObj(Medicamento,id)
+dPacObj = lambda id: delObj(Paciente   ,id)   
+dEntObj = lambda id: delObj(Entrada    ,id)     
+dSaiObj = lambda id: delObj(Saida      ,id)        
 
 #------------------- adding elements -------------
 
@@ -64,51 +105,53 @@ eSaiObj = lambda field, edit: editObj(Saida,    field, edit)
 def addMedicamento(nome, embalagem, dose, ratio, preco=0):
     q = Medicamento.get(nomeMedicamento=nome)
     if(q == None): 
-        q = Medicamento(
+        Medicamento(
                 nomeMedicamento=nome,
                 nomeEmbalagem=embalagem, 
                 nomeDose=dose, 
                 ratioEmbalagem=ratio[0],
                 ratioDose=ratio[1])
-    return q 
+        return True,'Medicamento adicionado'
+    return False,   'Medicamento ja existe'
 
 @db_session
 def addPaciente(nome, sobrenome, cpf='111-111-111-11', info=''):
     q = Paciente.get(nome=nome, sobrenome=sobrenome)
-    if(q): return q
-    return Paciente(nome=nome, sobrenome=sobrenome, cpf=cpf, info=info)
-
+    if(q == None): 
+        Paciente(nome=nome, sobrenome=sobrenome, cpf=cpf, info=info)
+        return True,'Paciente adicionado'
+    return False,   'Paciente ja existe'
 
 @db_session
-def addEntrada(med, embalagens, data=datetime.now()):
+def addEntrada(medId, embalagens, data=date.today()):
+
+    med = Medicamento.get(id=medId)
+    if(med == None): return False,"Medicamento nao existe"
 
     med.embalagens += med.ratioEmbalagem * embalagens
     med.doses      += med.ratioDose * med.embalagens 
-
     commit()
 
-    return Entrada(med=med, 
-                   estoque=embalagens, 
-                   estoqueTipo=med.nomeEmbalagem,
-                   data=data)
+    Entrada(med=med, estoque=embalagens, 
+            estoqueTipo=med.nomeEmbalagem,data=data)
+    return True, "Tudo certo"
 
 @db_session
-def addSaida(med, paciente, doses, data=datetime.now()):
+def addSaida(medId, pacientId, doses, data=date.today()):
+    med = Medicamento.get(id=medId)
+    pac = Paciente.get(id=pacientId)
+    if(pac == None): return False,"Paciente nao existe"
+    if(med == None): return False,"Medicamento nao existe"
+
     t = med.doses - doses
     t2 = med.embalagens 
+
     if(t <= 0): t2 -=1
     if(t2 < 0): t2 = 0
 
     med.doses = t
     med.embalagens = t2
     commit()
-
-    pac = Paciente.get(nome=paciente[0], sobrenome=paciente[1])
-    if(pac == None): pac = Paciente(nome='Paciente', sobrenome='NaoEspecificado')
-    return Saida(med=med, 
-                pac=pac, 
-                dosesTipo=med.nomeDose,
-                doses=doses, 
-                data=data)
-
-#populate()
+    Saida(med=med, pac=pac, dosesTipo=med.nomeDose,doses=doses, data=data)
+    return True, "Tudo certo"
+populate()
