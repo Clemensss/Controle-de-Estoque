@@ -2,29 +2,43 @@ from models import *
 import random
 @db_session
 def populate():
+    names = 0
     with open('src/names.txt') as f:
         for line in enumerate(f):
             addPaciente(line[1][:-1], 'Schrage{}'.format(line[0]))
+            names+=1
 
+    commit()
     med = [
     addMedicamento(
         'Protocolo de Menopausa',
-        'caixa', 'injetavel',(1,1)),
+        'caixa', 'injetavel',1),
     addMedicamento(
         'Protocolo de Aumento de produção de serotonina',
-        'caixa', 'injetavel',(1,1)),
+        'caixa', 'injetavel',1),
     addMedicamento(
         'Protocolo de Ganho de massa',
-        'caixa', 'injetavel',(1,1)),
+        'caixa', 'injetavel',1),
     addMedicamento(
         'Complexo B',
-        'caixa', 'pilula',(1,9))]
+        'caixa', 'pilula',9)]
 
+    commit()
     for i in range(10):
         addEntrada(
             random.randint(1, len(med)),
-            random.randint(10, 30)
+            random.randint(10, 30), data='2022-04-{}'.format(random.randint(1,30))
         )
+    
+    commit()
+
+    for i in range(10):
+        addSaida(
+            random.randint(1, len(med)), 
+            random.randint(1, names), 
+            random.randint(1, 5), data='2022-04-{}'.format(random.randint(1,30))
+        )
+
 
 #-----------------queries --------------------------------------------
 #abstractions
@@ -109,8 +123,8 @@ def addMedicamento(nome, embalagem, dose, ratio, preco=0):
                 nomeMedicamento=nome,
                 nomeEmbalagem=embalagem, 
                 nomeDose=dose, 
-                ratioEmbalagem=ratio[0],
-                ratioDose=ratio[1])
+                ratioDose=ratio, 
+                precoPorEmbalagem=preco)
         return True,'Medicamento adicionado'
     return False,   'Medicamento ja existe'
 
@@ -128,9 +142,10 @@ def addEntrada(medId, embalagens, data=date.today()):
     med = Medicamento.get(id=medId)
     if(med == None): return False,"Medicamento nao existe"
 
-    med.embalagens += med.ratioEmbalagem * embalagens
+    med.embalagens += embalagens
     med.doses      += med.ratioDose * med.embalagens 
     commit()
+    
 
     Entrada(med=med, estoque=embalagens, 
             estoqueTipo=med.nomeEmbalagem,data=data)
@@ -138,6 +153,7 @@ def addEntrada(medId, embalagens, data=date.today()):
 
 @db_session
 def addSaida(medId, pacientId, doses, data=date.today()):
+    print("fsaida")
     med = Medicamento.get(id=medId)
     pac = Paciente.get(id=pacientId)
     if(pac == None): return False,"Paciente nao existe"
@@ -151,6 +167,7 @@ def addSaida(medId, pacientId, doses, data=date.today()):
 
     med.doses = t
     med.embalagens = t2
+
     commit()
     Saida(med=med, pac=pac, dosesTipo=med.nomeDose,doses=doses, data=data)
     return True, "Tudo certo"

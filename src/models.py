@@ -9,7 +9,6 @@ db = Database()
 class Medicamento(db.Entity):
     nomeMedicamento = Required(str)
 
-    ratioEmbalagem = Required(int)
     ratioDose    = Required(int)
 
     #quantidade e tipo de armazenamento
@@ -44,7 +43,7 @@ class Paciente(db.Entity):
 
 class Saida(db.Entity):
     id = PrimaryKey(int, auto=True)
-    med = Set(Medicamento)
+    med = Required(Medicamento)
     pac = Required(Paciente)
     dosesTipo = Required(str)
     doses = Required(int)
