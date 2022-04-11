@@ -85,12 +85,12 @@ class Page(QWidget):
             button = QPushButton(b)
             button.setObjectName(b)
             laybs.addWidget(button)
-            button.clicked.connect(lambda event:self.iClick(event))
+            button.clicked.connect(lambda event:self.iClick(button.objectName()))
 
         lay.addWidget(bs)
 
     def iClick(self, event):
-        print('print')
+        print(event)
         self.popup = AdderPopUp(MedAddField, 'Adicionar novo medicamento')
         self.popup.signal.connect(lambda event: print(event))
         self.popup.exec_()
@@ -108,6 +108,7 @@ class AdderPopUp(QDialog):
     signal = pyqtSignal(list)
     def __init__(self, objField, wName, parent=None):
         super().__init__(parent)
+
         self.setWindowTitle(wName)
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setModal(True)
@@ -115,49 +116,57 @@ class AdderPopUp(QDialog):
         self.lay = QVBoxLayout(self)
         self.fields = [] 
         self.objField = objField
-        self.message=''
 
         self.genInput()
         
     def clearLayout(self):
         for i in reversed(range(self.lay.count())): 
-            widgetToRemove = self.lay.itemAt(i).widget()
-            self.lay.removeWidget(widgetToRemove)
-            widgetToRemove.setParent(None)
+            if type(self.lay.itemAt(i).widget()) == QLineEdit:
+                self.lay.itemAt(i).widget().setText('')
 
     def genInput(self):
-        self.fields = []
-        self.lay.addWidget(QLabel(self.message))
-        for t in self.objField:
-            self.lay.addWidget(QLabel(t[0]))
+        for name,val in self.objField:
+            self.lay.addWidget(QLabel(name))
             line = QLineEdit()
-            if t[1] != None:
-                line.setValidator(t[1])
+            
+            if val != None:
+                line.setValidator(val)
             self.lay.addWidget(line)
+
             self.fields.append(line)
-        bs=QWidget()
-        blay = QHBoxLayout(bs)
-        bsave, bcancel=QPushButton("Salvar"), QPushButton("Cancelar")
-        blay.addWidget(bsave)
-        blay.addWidget(bcancel)
-        bsave.clicked.connect(self.saveClick) 
-        bcancel.clicked.connect(self.close)
-        self.lay.addWidget(bs)
+
+        bWid = QWidget()
+        bLay = QHBoxLayout(bWid)
+        buttons=QPushButton("Salvar"), QPushButton("Cancelar")
+
+        for b in buttons: 
+            bLay.addWidget(b)
+
+        buttons[0].clicked.connect(self.saveClick) 
+        buttons[1].clicked.connect(self.close)
+        self.lay.addWidget(bWid)
 
     def saveClick(self):
-        self.message = ''
+        message = ''
         error = False
         for i in range(len(self.objField)):
+            m=''
             if(self.fields[i].hasAcceptableInput() == False):
-                self.message+='Valor de {} inválido\n'.format((self.objField[i])[0])
+                m ='Valor de {} inválido\n'.format((self.objField[i])[0])
                 error = True
             if(self.fields[i].isModified() == False):
-                self.message+='Valor de {} não preenchido\n'.format((self.objField[i])[0])
+                m='Valor de {} não preenchido\n'.format((self.objField[i])[0])
                 error = True
-        if(error): 
+            message += m
+        if(error):
             self.clearLayout()
-            self.genInput()
-        else: self.signal.emit([i.text() for i in self.fields])
+            er = QMessageBox(self)
+            er.setAttribute(Qt.WA_DeleteOnClose)
+            er.setText(message)
+            er.exec()
+            
+        else:
+            self.signal.emit([i.text() for i in self.fields])
             
 
 
