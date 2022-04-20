@@ -1,3 +1,6 @@
+import io
+from tkinter import messagebox
+from unicodedata import name
 from unittest.loader import VALID_MODULE_NAME
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -9,24 +12,24 @@ import funcoesdb
 import sys
 
 MINIMo = 5
-ordemNomesEntrada = [
+eqEntrada = [
     ('med'        , 'Medicamento'),
-    ('estoqueTipo', 'Tipo'),
-    ('estoque'    , 'Entrada'),
+    ('estoqueTipo', 'Tipo embalagens'),
+    ('estoque'    , 'Embalgens'),
     ('data'       , 'Data'),
 ]
-ordemNomesSaida = [
+eqSaida = [
     ('med'   , 'Medicamento'),
     ('pac'   , 'Paciente'),
-    ('dosesTipo', 'Tipo'),
+    ('dosesTipo', 'Tipo de dose'),
     ('doses' , 'Doses dadas'),
     ('data'  , 'Data'),
 ]
 eqMedicamentos = [
    ('nomeMedicamento', 'Nome'),
-   ('nomeEmbalagem', 'Tipo'),
+   ('nomeEmbalagem', 'Tipo de Embalagem'),
    ('embalagens', 'Quantidade de embalagens'),
-   ('nomeDose', 'Tipo' ),
+   ('nomeDose', 'Tipo de dose' ),
    ('ratioDose', 'Quantidade de doses por embalagem'),
    ('doses', 'Quantidade de doses'),
    ('precoPorEmbalagem', 'Preço')
@@ -50,10 +53,10 @@ class  MainWindow(QMainWindow):
 
         tabNames = ['Estoque','Entrada','Saida','Pacientes']
         tabs = [
-            ListAndInfo(eqMedicamentos,1, funcoesdb.qAllMed()),
-            TableEstoque(lambda: funcoesdb.qAllEnt(), ordemNomesEntrada),
-            TableEstoque(lambda: funcoesdb.qAllSai(), ordemNomesSaida),
-            ListAndInfo(eqPacientes, 2, funcoesdb.qAllPac())
+            ListAndInfo(eqMedicamentos,1,funcoesdb.qAllMed()),
+            TableEstoque( eqEntrada, funcoesdb.qAllChangeEnt()),
+            TableEstoque( eqSaida,   funcoesdb.qAllChangeSai()),
+            ListAndInfo(eqPacientes, 2,funcoesdb.qAllPac())
         ]
         tabAddFunc = [
             lambda *args : funcoesdb.addMedicamento(*args),
@@ -61,8 +64,48 @@ class  MainWindow(QMainWindow):
             lambda *args : funcoesdb.addMedicamento(*args),
             lambda *args : funcoesdb.addMedicamento(*args)
         ]
-        for i,n in enumerate(tabNames):
-            tabwizard.addPage(Page(tabs[i],BUTTONS), n)
+        
+        tabEditFunc = [
+            funcoesdb.eMedObj,
+            funcoesdb.eEntObj,
+            funcoesdb.eSaiObj,
+            funcoesdb.ePacObj,
+        ]
+        tabDelFuc = [
+            funcoesdb.dMedObj,
+            funcoesdb.dEntObj,
+            funcoesdb.dSaiObj,
+            funcoesdb.dPacObj,
+        ]
+
+        medChanges = {
+            'ratioDose':int,
+            'precoPorEmbalagem':float,
+        }
+        medExcludes = ['id','doses','entrada','saida','embalagens']
+        pacExcludes = ['id','saida']
+
+        entChanges = {
+            'med':funcoesdb.getAllMedNames(),
+            'embalagens':int,
+            'estoque':int,
+            'data' : 'date'
+        }
+        entExcludes = ['id']
+
+        saidaChanges = {
+            'med':funcoesdb.getAllMedNames(),
+            'pac':funcoesdb.getAllPacNames(),
+            'doses': int,
+            'data' : 'date'
+        }
+
+        saidaExcludes = ['id']
+
+        tabwizard.addPage(Page(tabs[0], BUTTONS, eqMedicamentos, medChanges,medExcludes), tabNames[0])
+        tabwizard.addPage(Page(tabs[1], BUTTONS, eqEntrada, entChanges,entExcludes), tabNames[1])
+        tabwizard.addPage(Page(tabs[2], BUTTONS, eqSaida, saidaChanges,saidaExcludes), tabNames[2])
+        tabwizard.addPage(Page(tabs[3], BUTTONS, eqPacientes, excludeadd=pacExcludes), tabNames[3])
 
         self.show()
 
@@ -82,205 +125,96 @@ class TabWizard(QTabWidget):
 
 class Page(QWidget):
     clicked = pyqtSignal(str)
-    def __init__(self, mWidget, buttons, parent=None):
+    def __init__(self, mWidget, buttons, eqName, changes=None,excludeadd = None, parent=None):
         super().__init__(parent)
 
         #cache of changed objects
-        self.cache = []
-        
+        self.mainW = mWidget
         lay = QVBoxLayout(self)
         self.popup=None
         lay.addWidget(mWidget)
+        self.eqName = eqName
+        self.changes = changes
+        self.excludeadd= excludeadd
+
         bs = QWidget()
         laybs = QHBoxLayout(bs)
         laybs.setAlignment(Qt.AlignLeft)
         laybs.setSpacing(100)
-        for b in buttons:
-            button = QPushButton(b)
-            button.setObjectName(b)
-            laybs.addWidget(button)
-            button.clicked.connect(self.iClick)
+
+        bAdicionar = QPushButton(buttons[0])
+        bAdicionar.setObjectName('add')
+        bAdicionar.clicked.connect(self.handleClick)
+        laybs.addWidget(bAdicionar)
+
+        bEditar = QPushButton(buttons[1])
+        bEditar.setObjectName('edit')
+        bEditar.clicked.connect(self.handleClick)
+        laybs.addWidget(bEditar)
+
+        bDeletar = QPushButton(buttons[2])
+        bDeletar.setObjectName('del')
+        bDeletar.clicked.connect(self.handleClick)
+        laybs.addWidget(bDeletar)
 
         lay.addWidget(bs)
 
-    def iClick(self):
+        self.mainW.selection.connect(lambda d: self.handleSelection(d))
+
+    def handleSelection(self, d):
+        self.selection = d
+        print(d)
+
+    def handleClick(self):
         b = self.sender()
-        print(b.objectName())
-        dbData = funcoesdb.qAllEnt()
-        self.popup = AdderPopUp(EntAddField, lambda x:x, 'Adicionar nova entrada', dbData)
-        self.popup.signal.connect(lambda event: print(event))
-        self.popup.exec_()
-
-#name that appear on popup, query, validator
-MedAddField = [
-   ('Nome', None, None),
-   ('Nome da Embalagem', None, None),
-   ('Tipo de Dose', None, None),
-   ('Quantas doses por embalagem', None, QDoubleValidator()),
-   ('Preço por embalagem', None, QIntValidator()),
-]
-
-EntAddField = [
-   ('Medicamento', 'med', None),
-   ('Quandidade de Embalagens', None, QIntValidator()),
-   ('Data de entrada', 'date', None),
-]
-
-#I truly hate gui
-class AdderPopUp(QDialog):
-    signal = pyqtSignal(list)
-    def __init__(self, nameField, func, wName, dbData=None, parent=None):
-        super().__init__(parent)
-
-        self.setWindowTitle(wName)
-        self.setAttribute(Qt.WA_DeleteOnClose)
-        self.setModal(True)
-
-        self.lay = QVBoxLayout(self)
-        self.inputFields = []
-        self.inputs = [] 
-        self.nameField = nameField
-        self.dbData = dbData
-        self.genInputField()
-
-    def genInputField(self):
-        for fieldName,query,validator in self.nameField:
-            self.lay.addWidget(QLabel(fieldName))
-            self.genInputLine(validator, query)
-
-        bWid = QWidget()
-        bLay = QHBoxLayout(bWid)
-        bSalvar   = QPushButton("Salvar")
-        bCancelar = QPushButton("Cancelar")
-
-        bLay.addWidget(bSalvar)
-        bLay.addWidget(bCancelar)
-
-        bSalvar.clicked.connect(self.saveClick) 
-        bCancelar.clicked.connect(self.close)
-        self.lay.addWidget(bWid)
-
-    #gen qlineedit inputs, if there is a query
-    # it will use to create a completer 
-    # if query is set to 'date' it will create
-    # a qdateedit field instead
-    def genInputLine(self,validator, query):
-        input = QLineEdit()
-
-        if query != None:
-            if query == 'date':
-                input = self.genInputDate() 
-            else:
-                wordList = self.genInputOptions(query)
-                completer = QCompleter(wordList, self)
-                completer.setCaseSensitivity(Qt.CaseInsensitive)
-                input.setCompleter(completer)
-
-        if validator != None:
-            input.setValidator(validator)
-
-
-        self.lay.addWidget(input)
-        self.inputFields.append(input)
-
-    def genInputDate(self):
-        dateInput = QDateEdit(QDate.currentDate())
-        dateInput.setDisplayFormat('dd.MM.yyyy')
-        dateInput.setCalendarPopup(True)
-        return dateInput
-
-    #creates options without duplicates
-    def genInputOptions(self, query):
-        if self.dbData != None:
-            options = set()
-            for dbDict in self.dbData:
-                options.update([dbDict[query]])
-            return list(options)
-        return None
-
-    
-    def getInput(self):
-        error, message = self.checkInput() 
-        if error == False:
-            for el in self.inputFields:
-                input = None
-                if type(el) == QLineEdit:
-                    input = el.text()
-                elif type(el) == QDateEdit:
-                    date = el.date()
-                    input = date.toPyDate()
-
-                self.inputs.append(input)
-        return error,message
-    
-    #check if qlineedit inputs are valid an
-    def checkInput(self):
-        error = False
-        message = ''
-        for el in enumerate(self.inputFields):
-            m = ''
-            if type(el) == QLineEdit:   
-                if(el.hasAcceptableInput() == False):
-                    m ='Valor de {} inválido\n'.format((self.nameField[i])[0])
-                    error = True
-                if(el.isModified() == False):
-                    m='Valor de {} não preenchido\n'.format((self.nameField[i])[0])
-                    error = True
-            message += m        
-
-        if(error == False):message = 'Sucesso!\n'
-        return error, message
-
-    def saveClick(self):
-        error, message = self.getInput() 
-        if(error):
-            self.clearLayout()
-            self.inputs, self.inputFields = [], []
-        else:
-            #self.signal.emit(self.inputs) 
-            print(self.inputs)
-        self.genMessageBox(message)  
-
-    def genMessageBox(self,message):
-        m = QMessageBox(self)
-        m.setAttribute(Qt.WA_DeleteOnClose)
-        m.setText(message)
-        m.exec()
-
-    def clearLayout(self):
-        for i in reversed(range(self.lay.count())): 
-            if type(self.lay.itemAt(i).widget()) == QLineEdit:
-                self.lay.itemAt(i).widget().setText('')
+        name = b.objectName()
+        
+        if name == 'edit':
+            pass
+        if name == 'del':
+            pass
+        if name == 'add':
+            add = AdderPopUp(self.eqName,self.changes,self.excludeadd)
+            add.exec_()
 
 #creates a table widget using a db query func and 
 #a reference list of dicts as guide for the structure
 class TableEstoque(QTableWidget):
-    def __init__(self, dbFunc, dbNewNames, *args):
+    selection = pyqtSignal(dict)
+    def __init__(self, eqNames, dbData,*args):
         QTableWidget.__init__(self, *args)
-        self.dbData = dbFunc()
-        self.dbNewNames = dbNewNames
-        self.setColumnCount(len(dbNewNames))
+        self.dbData = dbData
+        self.eqNames = eqNames
+        self.setColumnCount(len(eqNames))
         self.setRowCount(len(self.dbData))
 
-        self.setHorizontalHeaderLabels([name for _, name in dbNewNames])
+        self.setHorizontalHeaderLabels([name for _, name in eqNames])
         self.setData()
 
         self.resizeColumnsToContents()
         self.resizeRowsToContents()
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
-
+        self.clicked.connect(self.handleClick)
 
     #takes output dich_db_entity and turn it into 
     #a table widget, referecing dbNewNames, for the
     #col order and row headers
+    def handleClick(self):
+        ci = self.currentItem()
+        id = (self.dbData[ci.row()])['id']
+        itemName = (self.eqNames[ci.column()])[0]
+        itemData = ci.text()
+        self.selection.emit({'id': id, 'data': {itemName:itemData}})
+
     def setData(self):
-        for col,(dbName,disName) in enumerate(self.dbNewNames):
+        for col,(dbName,_) in enumerate(self.eqNames):
             for row,dbItemDict in enumerate(self.dbData):
-                tableName = str(dbItemDict[dbName])
-                print(tableName)
-                self.setItem(row,col,QTableWidgetItem(tableName))
+                tableData = str(dbItemDict[dbName])
+                print(tableData)
+                self.setItem(row,col,QTableWidgetItem(tableData))
 
 class ListAndInfo(QWidget):
+    selection = pyqtSignal(dict)
     def __init__(self, nameOrder, firstShow, dbData, *args, **kwargs):
         super().__init__(*args, *kwargs)
         self.nameOrder = nameOrder
@@ -293,15 +227,17 @@ class ListAndInfo(QWidget):
         self.lay.addWidget(self.lista)
         self.info = None
 
-        self.lista.clicked.connect(lambda event: self.showInfo(event))
+        self.lista.signal.connect(lambda d: self.handleClick(d))
 
-    def showInfo(self, i):
+    def handleClick(self, d):
         if(self.info != None):
             self.lay.removeWidget(self.info)
             sip.delete(self.info)
-        self.info = Info(self.nameOrder, self.dbData[i.row()])
+
+        self.info = Info(self.nameOrder, d)
         self.lay.addWidget(self.info)
         self.info.move(self.maximumWidth()-20, self.maximumHeight() -20)
+        self.selection.emit({'id': d['id'], 'data': d})
 
 class Info(QWidget):
     def __init__(self, nameOrder, dbDict, *args, **kwargs):
@@ -325,25 +261,172 @@ class Lista(QListWidget):
     def __init__(self, nameOrder, firstShow, dbData, *args, **kwargs):
         super().__init__(*args, *kwargs)
 
-        self.itemClicked.connect(lambda:self.iClick())
+        self.itemClicked.connect(lambda:self.handleClick())
         self.dbData = dbData
 
         for dbDict in dbData:
-            l = ''
+            listItemName = ''
             for i in range(firstShow):
                 dbData    = dbDict[nameOrder[i][0]]
 
                 if dbData != None:
-                    l += str(dbData)
-                    if i+1 < firstShow: l+=' '
+                    listItemName += str(dbData)
+                    if i+1 < firstShow: listItemName+=' '
                 
-            self.addItem(QListWidgetItem(l))
+            self.addItem(QListWidgetItem(listItemName))
             
-    def iClick(self):
+    def handleClick(self):
         listIndex = self.indexFromItem(self.currentItem())
         dbDict = self.dbData[listIndex.row()]
         self.signal.emit(dbDict)
 
+#datadict = dict with edit fields
+#eqName = equivalt names 
+#changes = [('field_to_be_filled', query_data, already in list form)]
+class EditPopUp(QDialog):
+    def __init__(self, dataDict, eqName, changes=None, parent=None):
+        super().__init__(parent)
+
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setModal(True)
+        self.lay = QVBoxLayout(self)
+
+        self.input = {}
+
+        for key,value in dataDict.items():
+            #pick name I want out of eqName
+            labelName = (eqName[inTupleList(key, eqName, 0)])[0]
+            label = QLabel(labelName)
+            input = QLineEdit()
+            if changes != None: 
+                if key in changes:
+                    data = changes[key]
+                    if data == 'date':
+                        input = QDateEdit(QDate.currentDate())
+                    elif type(data) == int:
+                        input.setValidator(QIntValidator())
+                    elif type(data) == float:
+                        input.setValidator(QDoubleValidator())
+                    elif type(data) == list:
+                        completer = QCompleter(data)
+                        completer.setCaseSensitivity(Qt.CaseInsensitive)
+                        input.setCompleter(completer)   
+                    self.input[key] = (input, data)
+                        
+                if type(input) == QLineEdit:
+                    input.setText(value)
+
+            self.lay.addWidget(label)
+            self.lay.addWidget(input)
+
+def inTupleList(field_name, list, index):
+    for i, data in enumerate(list):
+        if data[index] == field_name:
+            return i
+    return -1
+
+#name that appear on popup, query, validator
+#I truly hate gui
+#fieldchanges = dict with dbnames and a list of dicts with
+#item data and item id, if its a string name 'date', make
+#a date object
+
+class AdderPopUp(QDialog):
+    signal = pyqtSignal(list)
+    def __init__(self, eqField, changes=None, exclude=None, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle('Adicionar novo item')
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setModal(True)
+        self.inputs = []
+
+        self.lay = QVBoxLayout(self)
+        for key, name in eqField:
+            label = QLabel(name)
+            input = QLineEdit()
+            append = input
+            if key in exclude:
+                continue
+            if changes != None: 
+                if key in changes:
+                    data = changes[key]
+                    if data == 'date':
+                        input = QDateEdit(QDate.currentDate())
+                        append = (input, data)
+                    elif data == int:
+                        input.setValidator(QIntValidator())
+                        append = (input, data)
+                    elif data == float:
+                        input.setValidator(QDoubleValidator())
+                        append = (input, data)
+                    elif type(data) == list:
+                        completer = QCompleter(data)
+                        completer.setCaseSensitivity(Qt.CaseInsensitive)
+                        input.setCompleter(completer)   
+                        append = (input, data)
+
+            self.lay.addWidget(label)
+            self.lay.addWidget(input)
+            self.inputs.append(append)
+        bs = QWidget()
+        laybs = QHBoxLayout(bs)
+        bAdicionar = QPushButton('Adicionar')
+        bAdicionar.clicked.connect(self.getInput)
+        laybs.addWidget(bAdicionar)
+
+        bCancelar = QPushButton('Cancelar')
+        bCancelar.clicked.connect(self.close)
+        laybs.addWidget(bCancelar)
+
+        self.lay.addWidget(bs)
+
+    def getInput(self):
+        output = []
+        for item in self.inputs:
+            append = None
+            if type(item) == tuple:
+                it = item[0]
+                data = item[1]
+               #if it.isModified() == False and data != 'date':
+               #    messagebox(self, 'Por favor preencher todos os campos')
+               #    break
+                if data == 'date':
+                    t = it.date()
+                    append = t.toPyDate()
+                elif data == int:
+                    if it.hasAcceptableInput() == False:
+                        messagebox(self, 'Entrada não é válida, usar números inteiros')
+                        break
+                    append = int(it.text())
+                elif data == float:
+                    if it.hasAcceptableInput() == False:
+                        messagebox(self, 'Entrada não é válida, usar números decimais')
+                        break
+                    append = float(it.text())
+                elif type(data) == list:
+                    text = it.text()
+                    for i,t in enumerate(data):
+                        if text == t:
+                            append = i+1
+            else:
+                if item.isModified() == False:
+                    messagebox(self, 'Por favor preencher todos os campos')
+                    break
+                append = item.text()
+            output.append(append) 
+        print(output)
+
+
+    def clearLayout(self):
+        for i in reversed(range(self.lay.count())): 
+            if type(self.lay.itemAt(i).widget()) == QLineEdit:
+                self.lay.itemAt(i).widget().setText('')
+
+def messagebox(lay, message):
+    m= QMessageBox(lay)
+    m.setText(message)
+    m.exec_()
 if __name__ == '__main__':
     funcoesdb.populate()
     app = QApplication(sys.argv)
