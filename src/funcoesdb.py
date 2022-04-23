@@ -8,7 +8,6 @@ def populate():
             addPaciente(line[1][:-1], 'Schrage{}'.format(line[0]))
             names+=1
 
-    commit()
     med = [
     addMedicamento(
         'Protocolo de Menopausa',
@@ -23,7 +22,6 @@ def populate():
         'Complexo B',
         'caixa', 'pilula',9,0)]
 
-    commit()
     for i in range(10):
         addEntrada(
             random.randint(1, len(med)),
@@ -40,28 +38,38 @@ def populate():
         )
 
 class dbInterface:
-    def __init__(self, objType, delFunc, addFunc, editFunc, getFunc):
+    def __init__(self, delFunc, delKids, addFunc,addEmptyFunc, editFunc, getFunc):
         self.undoList = []
-        self.cache = []
-        self.objType = objType
+        self.redoList = []
         self.addFunc=addFunc
+        self.addEmptyFunc=addEmptyFunc
         self.editFunc=editFunc
         self.delFunc=delFunc
+        self.delKids=delKids
         self.getFunc=getFunc
 
     @db_session
+    def deleteWChildren(self,id):
+        self.delKids(id)
+    @db_session
     def delete(self, id):
+        self.redoList = []
         current = self.getFunc(id)
+        current = current.to_dict(with_collections=True)
         if(self.delFunc(id)):
             self.undoList.append({'type': 'add', 
-                'obj' : current.to_dict(exclude='id', with_collections=True)})
+                'obj' : current})
 
+    @db_session
     def add(self, args):
+        self.redoList = []
         id = self.addFunc(*args)
         self.undoList.append({'type': 'del', 'obj' : id})
+        print('id {}'.format(id))
 
     @db_session
     def edit(self, id, dict):
+        self.redoList = []
         current = self.getFunc(id)
 
         self.undoList.append({'type': 'edit', 
@@ -72,36 +80,42 @@ class dbInterface:
     @db_session
     def undoRedo(self,p):
         obj = p['obj']
-        prev = self.getFunc(obj.id)
         tipo = p['type']
 
         if  tipo == 'edit':
             id = obj['id']
-            newDict = obj.pop('id',None)
+            obj.pop('id',None)
+            newDict = obj
+            prev = self.getFunc(id)
+            prev = prev.to_dict(with_collections=True)
             self.editFunc(id, newDict)
+            return {'type' : 'edit',
+                'obj' : prev}
+
 
         elif tipo == 'del':
-            self.delFunc(obj['id'])
+            prev = self.getFunc(obj)
+            prev = prev.to_dict(with_collections=True)
+            self.delFunc(obj)
+            return {'type' : 'add',
+                'obj' : prev}
 
         elif tipo == 'add':
-            args = [None for _ in range(10)]
-            newId = self.addFunc(*args) 
+            self.addEmptyFunc(obj['id']) 
+            newId = obj['id'] 
+            obj.pop('id',None)
             self.editFunc(newId, obj)
+            return {'type' : 'del', 'obj':newId}
 
     def undo(self):
-        if self.undoing != []:
-            p = self.undoing.pop()
+        if self.undoList != []:
+            p = self.undoList.pop()
+            self.redoList.append(self.undoRedo(p))
             
-    def redo_h(self,p):
-        if p[1] == 'edit':
-            self.editFunc(*(p[0])) 
-        elif p[1] == 'del':
-            self.addFunc(*(p[0])) 
-        elif p[1] == 'add':
-            self.delFunc(*(p[0])) 
     def redo(self):
-        if self.cache != []:
-            p = self.cache.pop()
+        if self.redoList != []:
+            p = self.redoList.pop()
+            self.undoList.append(self.undoRedo(p))
         
 
 
@@ -125,7 +139,10 @@ def changeNameDict(change, queryDict, field, objclass):
         objIdQuery, objClass = queryDict[d[field]], d[objclass]
 
         obj = objClass.get(id=objIdQuery) #query
-        queryDict[d[field]] = obj.name    #changes name
+        if obj != None:
+            queryDict[d[field]] = obj.name    #changes name
+        else:
+            queryDict[d[field]] = 'Objeto não encontrado'    #changes name
     return queryDict
 
 @db_session
@@ -140,20 +157,20 @@ def queryAllToDict(obj, order=None, change=None):
         return arr
 
 #change field obj to str with the name
-by_date = lambda o : o.data
+by_date = lambda o : desc(o.data)
 
 #queries
 
 @db_session
 def getAllMedNames():
     l = []
-    for i in Medicamento.select().order_by(lambda i : desc(i.id)):
+    for i in Medicamento.select().order_by(lambda i : i.id):
         l.append(i.name)
     return l
 @db_session
 def getAllPacNames():
     l = []
-    for i in Paciente.select().order_by(lambda i : desc(i.id)):
+    for i in Paciente.select().order_by(lambda i : i.id):
         l.append(i.name)
     return l
 
@@ -161,7 +178,7 @@ def getAllPacNames():
 def getObj(obj, id):
     o = obj.get(id=id)
     if(o == None): 
-        return False
+        return None
     return o
 
 gMedObj = lambda id: getObj(Medicamento, id)
@@ -171,7 +188,7 @@ gSaiObj = lambda id: getObj(Saida,       id)
 
 #thats also the reason i made all those super complicated functions, so it looks nice
 qAllMed = lambda : queryAllToDict(Medicamento)
-qAllPac = lambda : queryAllToDict(Paciente)
+qAllPac = lambda : queryAllToDict(Paciente, order=lambda c : c.nome)
 qAllEnt = lambda : queryAllToDict(Entrada, order=by_date)
 qAllSai = lambda : queryAllToDict(Saida,   order=by_date)
 
@@ -182,16 +199,31 @@ qAllChangeSai = lambda : queryAllToDict(Saida,   order=by_date, change=[changeMe
 
 #------------------- editing elements -------------
 @db_session
-def editObj(obj, id, d):
+def editObj(obj, id, d, query=None):
     o = obj.get(id=id)
     if(o == None): return False
+    #get the objects if needed 
+    if query != None and type(d) == dict:
+        for key in d:
+            if key in query:
+                if type(d[key]) == list:
+                    nv = [] 
+                    for id in d[key]:
+                        nv.append(query[key].get(id=id))
+                    d[key] =nv
+                else:
+                        d[key] = query[key].get(id=d[key])
+
     o.set(**d)
     return True
-
-eMedObj = lambda id, dict: editObj(Medicamento,id, dict)
-ePacObj = lambda id, dict: editObj(Paciente,   id, dict)
-eEntObj = lambda id, dict: editObj(Entrada,    id, dict)
-eSaiObj = lambda id, dict: editObj(Saida,      id, dict) 
+QUERY_EDIT_MED = {'entrada':Entrada, 'saida':Saida}
+eMedObj = lambda id, dict: editObj(Medicamento,id, dict,QUERY_EDIT_MED)
+QUERY_EDIT_PAC = {'saida':Saida}
+ePacObj = lambda id, dict: editObj(Paciente,   id, dict,QUERY_EDIT_PAC)
+QUERY_EDIT_ENT = {'med':Medicamento,'pac':Paciente}
+eEntObj = lambda id, dict: editObj(Entrada,    id, dict,QUERY_EDIT_ENT)
+QUERY_EDIT_SAI = {'pac':Paciente}
+eSaiObj = lambda id, dict: editObj(Saida,      id, dict,QUERY_EDIT_SAI)
 #------------------- deleting elements -------------
 @db_session
 def delObj(obj,id):
@@ -205,18 +237,41 @@ dPacObj = lambda id: delObj(Paciente   ,id)
 dEntObj = lambda id: delObj(Entrada    ,id)     
 dSaiObj = lambda id: delObj(Saida      ,id)        
 
+def delKids(obj,id):
+    o = obj.get(id=id)
+    if(o == None): return False
+    o.deleteRelation()
+    return True
+
+delKidsMed = lambda id: delKids(Medicamento,id)
+delKidsPac = lambda id: delKids(Paciente   ,id)   
+delKidsEnt = lambda id: delKids(Entrada    ,id)     
+delKidsSai = lambda id: delKids(Saida      ,id)        
 #------------------- adding elements -------------
+
+@db_session
+def addEmptyObj(obj, id):
+    o = obj.get(id=id)
+    if(o != None): return False
+    o = obj(id=id)
+
+aMedObj = lambda id: addEmptyObj(Medicamento,id)
+aPacObj = lambda id: addEmptyObj(Paciente   ,id)   
+aEntObj = lambda id: addEmptyObj(Entrada    ,id)     
+aSaiObj = lambda id: addEmptyObj(Saida      ,id)        
 
 @db_session
 def addMedicamento(nome, embalagem, dose, ratio, preco):
     q = Medicamento.get(nomeMedicamento=nome)
     if(q == None): 
         obj = Medicamento(
-                nomeMedicamento=nome,
-                nomeEmbalagem=embalagem, 
-                nomeDose=dose, 
+                nomeMedicamento=nome.upper(),
+                nomeEmbalagem=embalagem.upper(), 
+                nomeDose=dose.upper(), 
                 ratioDose=ratio, 
                 precoPorEmbalagem=preco)
+        commit()
+        print(obj.id)
         return obj.id
     return None 
 
@@ -224,43 +279,29 @@ def addMedicamento(nome, embalagem, dose, ratio, preco):
 def addPaciente(nome, sobrenome, cpf='111-111-111-11', info=''):
     q = Paciente.get(nome=nome, sobrenome=sobrenome)
     if(q == None): 
-        obj = Paciente(nome=nome, sobrenome=sobrenome, cpf=cpf, info=info)
+        obj = Paciente(nome=nome.upper(), sobrenome=sobrenome.upper(), cpf=cpf, info=info)
+        commit()
         return obj.id
     return None 
 
 @db_session
-def addEntrada(medId, embalagens, data=date.today()):
+def addEntrada(medId, embalagens, data):
 
     med = Medicamento.get(id=medId)
     if(med == None): return None 
 
-    med.embalagens += embalagens
-    med.doses      += med.ratioDose * med.embalagens 
-    commit()
     
-
     obj = Entrada(med=med, estoque=embalagens, 
             estoqueTipo=med.nomeEmbalagem,data=data)
+    commit()
     return obj.id
 
 @db_session
-def addSaida(medId, pacientId, doses, data=date.today()):
-    print("fsaida")
+def addSaida(medId, pacientId, doses, data):
     med = Medicamento.get(id=medId)
     pac = Paciente.get(id=pacientId)
     if(pac == None or med == None): return None
 
-    t = med.doses - doses
-    t2 = med.embalagens 
-
-    if(t <= 0): t2 -=1
-    if(t2 < 0): t2 = 0
-
-    med.doses = t
-    med.embalagens = t2
-
-    commit()
     obj = Saida(med=med, pac=pac, dosesTipo=med.nomeDose,doses=doses, data=data)
+    commit()
     return obj.id
-
-populate()

@@ -15,7 +15,7 @@ MINIMo = 5
 eqEntrada = [
     ('med'        , 'Medicamento'),
     ('estoqueTipo', 'Tipo embalagens'),
-    ('estoque'    , 'Embalgens'),
+    ('estoque'    , 'Embalagens'),
     ('data'       , 'Data'),
 ]
 eqSaida = [
@@ -53,31 +53,11 @@ class  MainWindow(QMainWindow):
 
         tabNames = ['Estoque','Entrada','Saida','Pacientes']
         tabs = [
-            ListAndInfo(eqMedicamentos,1,funcoesdb.qAllMed()),
-            TableEstoque( eqEntrada, funcoesdb.qAllChangeEnt()),
-            TableEstoque( eqSaida,   funcoesdb.qAllChangeSai()),
-            ListAndInfo(eqPacientes, 2,funcoesdb.qAllPac())
+            ListAndInfo(eqMedicamentos,1,funcoesdb.qAllMed),
+            TableEstoque( eqEntrada, funcoesdb.qAllChangeEnt),
+            TableEstoque( eqSaida,   funcoesdb.qAllChangeSai),
+            ListAndInfo(eqPacientes, 2,funcoesdb.qAllPac)
         ]
-        tabAddFunc = [
-            lambda *args : funcoesdb.addMedicamento(*args),
-            lambda *args : funcoesdb.addEntrada(*args),
-            lambda *args : funcoesdb.addMedicamento(*args),
-            lambda *args : funcoesdb.addMedicamento(*args)
-        ]
-        
-        tabEditFunc = [
-            funcoesdb.eMedObj,
-            funcoesdb.eEntObj,
-            funcoesdb.eSaiObj,
-            funcoesdb.ePacObj,
-        ]
-        tabDelFuc = [
-            funcoesdb.dMedObj,
-            funcoesdb.dEntObj,
-            funcoesdb.dSaiObj,
-            funcoesdb.dPacObj,
-        ]
-
         medChanges = {
             'ratioDose':int,
             'precoPorEmbalagem':float,
@@ -91,7 +71,7 @@ class  MainWindow(QMainWindow):
             'estoque':int,
             'data' : 'date'
         }
-        entExcludes = ['id']
+        entExcludes = ['id', 'estoqueTipo']
 
         saidaChanges = {
             'med':funcoesdb.getAllMedNames(),
@@ -100,12 +80,40 @@ class  MainWindow(QMainWindow):
             'data' : 'date'
         }
 
-        saidaExcludes = ['id']
+        saidaExcludes = ['id','dosesTipo']
+        interfaceMed = funcoesdb.dbInterface(
+                                    funcoesdb.dMedObj,
+                                    funcoesdb.delKidsMed,
+                                    funcoesdb.addMedicamento, 
+                                    funcoesdb.aMedObj, 
+                                    funcoesdb.eMedObj, 
+                                    funcoesdb.gMedObj)
+        interfaceEnt = funcoesdb.dbInterface(
+                                    funcoesdb.dEntObj, 
+                                    funcoesdb.delKidsEnt,
+                                    funcoesdb.addEntrada, 
+                                    funcoesdb.aEntObj,
+                                    funcoesdb.eEntObj, 
+                                    funcoesdb.gEntObj)
+        interfaceSai = funcoesdb.dbInterface(
+                                    funcoesdb.dSaiObj, 
+                                    funcoesdb.delKidsSai,
+                                    funcoesdb.addSaida, 
+                                    funcoesdb.aSaiObj,
+                                    funcoesdb.eSaiObj, 
+                                    funcoesdb.gSaiObj)
+        interfacePac = funcoesdb.dbInterface(
+                                    funcoesdb.dPacObj, 
+                                    funcoesdb.delKidsPac,
+                                    funcoesdb.addPaciente, 
+                                    funcoesdb.aPacObj,
+                                    funcoesdb.ePacObj, 
+                                    funcoesdb.gPacObj)
 
-        tabwizard.addPage(Page(tabs[0], BUTTONS, eqMedicamentos, medChanges,medExcludes), tabNames[0])
-        tabwizard.addPage(Page(tabs[1], BUTTONS, eqEntrada, entChanges,entExcludes), tabNames[1])
-        tabwizard.addPage(Page(tabs[2], BUTTONS, eqSaida, saidaChanges,saidaExcludes), tabNames[2])
-        tabwizard.addPage(Page(tabs[3], BUTTONS, eqPacientes, excludeadd=pacExcludes), tabNames[3])
+        tabwizard.addPage(Page(tabs[0], BUTTONS, eqMedicamentos, interfaceMed, medChanges,medExcludes), tabNames[0])
+        tabwizard.addPage(Page(tabs[1], BUTTONS, eqEntrada, interfaceEnt, entChanges,entExcludes), tabNames[1])
+        tabwizard.addPage(Page(tabs[2], BUTTONS, eqSaida, interfaceSai,saidaChanges,saidaExcludes), tabNames[2])
+        tabwizard.addPage(Page(tabs[3], BUTTONS, eqPacientes, interfacePac, excludeadd=pacExcludes), tabNames[3])
 
         self.show()
 
@@ -125,14 +133,15 @@ class TabWizard(QTabWidget):
 
 class Page(QWidget):
     clicked = pyqtSignal(str)
-    def __init__(self, mWidget, buttons, eqName, changes=None,excludeadd = None, parent=None):
+    def __init__(self, mWidget, buttons, eqName, dbInterface, changes=None,excludeadd = None, parent=None):
         super().__init__(parent)
 
-        #cache of changed objects
         self.mainW = mWidget
         lay = QVBoxLayout(self)
         self.popup=None
+        self.dbInterface = dbInterface
         lay.addWidget(mWidget)
+        self.selection = None
         self.eqName = eqName
         self.changes = changes
         self.excludeadd= excludeadd
@@ -157,6 +166,21 @@ class Page(QWidget):
         bDeletar.clicked.connect(self.handleClick)
         laybs.addWidget(bDeletar)
 
+        bDesfazer = QPushButton('Desfazer')
+        bDesfazer.setObjectName('desfazer')
+        bDesfazer.clicked.connect(self.handleClick)
+        laybs.addWidget(bDesfazer)
+
+        bRefazer = QPushButton('Refazer')
+        bRefazer.setObjectName('refazer')
+        bRefazer.clicked.connect(self.handleClick)
+        laybs.addWidget(bRefazer)
+
+        bAtualizar = QPushButton('Atualizar')
+        bAtualizar.setObjectName('atualizar')
+        bAtualizar.clicked.connect(self.handleClick)
+        laybs.addWidget(bAtualizar)
+
         lay.addWidget(bs)
 
         self.mainW.selection.connect(lambda d: self.handleSelection(d))
@@ -168,22 +192,46 @@ class Page(QWidget):
     def handleClick(self):
         b = self.sender()
         name = b.objectName()
-        
+        change = False 
         if name == 'edit':
-            pass
-        if name == 'del':
-            pass
-        if name == 'add':
-            add = AdderPopUp(self.eqName,self.changes,self.excludeadd)
-            add.exec_()
+            if self.selection != None:
+                self.popup = EditPopUp(self.selection['data'], self.eqName, self.changes)
+                print(self.selection['id'])
+                self.popup.signal.connect(lambda d : self.dbInterface.edit(self.selection['id'], d))
+                self.popup.exec_()
+                change = True
+                print('edit')
+        elif name == 'del':
+            if self.selection != None:
+                self.dbInterface.delete(self.selection['id'])
+                change = True
+                print('del')
+        elif name == 'add':
+            self.popup = AdderPopUp(self.eqName,self.changes,self.excludeadd)
+            self.popup.signal.connect(lambda l : self.dbInterface.add(l))
+            self.popup.exec_()
+            change = True
+            print('add')
+        elif name == 'desfazer':
+            self.dbInterface.undo()
+            change = True
+        elif name == 'refazer':
+            self.dbInterface.redo()
+            change = True
+        elif name == 'atualizar':
+            change = True
+
+        if change:
+            self.mainW.refresh()
 
 #creates a table widget using a db query func and 
 #a reference list of dicts as guide for the structure
 class TableEstoque(QTableWidget):
     selection = pyqtSignal(dict)
-    def __init__(self, eqNames, dbData,*args):
+    def __init__(self, eqNames, dbfunc,*args):
         QTableWidget.__init__(self, *args)
-        self.dbData = dbData
+        self.dbfunc = dbfunc
+        self.dbData = dbfunc()
         self.eqNames = eqNames
         self.setColumnCount(len(eqNames))
         self.setRowCount(len(self.dbData))
@@ -196,6 +244,11 @@ class TableEstoque(QTableWidget):
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.clicked.connect(self.handleClick)
 
+    def refresh(self):
+        self.dbData = self.dbfunc()
+        self.setRowCount(len(self.dbData))
+        self.setData()
+        self.resizeRowsToContents()
     #takes output dich_db_entity and turn it into 
     #a table widget, referecing dbNewNames, for the
     #col order and row headers
@@ -210,15 +263,15 @@ class TableEstoque(QTableWidget):
         for col,(dbName,_) in enumerate(self.eqNames):
             for row,dbItemDict in enumerate(self.dbData):
                 tableData = str(dbItemDict[dbName])
-                print(tableData)
                 self.setItem(row,col,QTableWidgetItem(tableData))
 
 class ListAndInfo(QWidget):
     selection = pyqtSignal(dict)
-    def __init__(self, nameOrder, firstShow, dbData, *args, **kwargs):
+    def __init__(self, nameOrder, firstShow, dbfunc, *args, **kwargs):
         super().__init__(*args, *kwargs)
         self.nameOrder = nameOrder
-        self.dbData = dbData
+        self.dbfunc = dbfunc
+        self.dbData = dbfunc()
         self.firstShow = firstShow
 
         self.lay = QHBoxLayout(self)
@@ -227,6 +280,20 @@ class ListAndInfo(QWidget):
         self.lay.addWidget(self.lista)
         self.info = None
 
+        self.lista.signal.connect(lambda d: self.handleClick(d))
+
+    def refresh(self):
+        self.dbData = self.dbfunc()
+        if(self.info != None):
+            self.lay.removeWidget(self.info)
+            sip.delete(self.info)
+        self.info = None
+        self.lay.removeWidget(self.lista)
+        self.lista.setParent(None)
+        sip.delete(self.lista)
+        self.lista = None
+        self.lista = Lista(self.nameOrder, self.firstShow, self.dbData)
+        self.lay.addWidget(self.lista)
         self.lista.signal.connect(lambda d: self.handleClick(d))
 
     def handleClick(self, d):
@@ -284,18 +351,19 @@ class Lista(QListWidget):
 #eqName = equivalt names 
 #changes = [('field_to_be_filled', query_data, already in list form)]
 class EditPopUp(QDialog):
+    signal = pyqtSignal(dict)
     def __init__(self, dataDict, eqName, changes=None, parent=None):
         super().__init__(parent)
 
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setModal(True)
         self.lay = QVBoxLayout(self)
-
-        self.input = {}
+        self.dataDict = dataDict
+        self.inputs = {}
 
         for key,value in dataDict.items():
             #pick name I want out of eqName
-            labelName = (eqName[inTupleList(key, eqName, 0)])[0]
+            labelName = (eqName[inTupleList(key, eqName, 0)])[1]
             label = QLabel(labelName)
             input = QLineEdit()
             if changes != None: 
@@ -303,21 +371,75 @@ class EditPopUp(QDialog):
                     data = changes[key]
                     if data == 'date':
                         input = QDateEdit(QDate.currentDate())
-                    elif type(data) == int:
+                    elif data == int:
                         input.setValidator(QIntValidator())
-                    elif type(data) == float:
+                    elif data == float:
                         input.setValidator(QDoubleValidator())
                     elif type(data) == list:
                         completer = QCompleter(data)
                         completer.setCaseSensitivity(Qt.CaseInsensitive)
                         input.setCompleter(completer)   
-                    self.input[key] = (input, data)
+                        input.setText(str(value))
+                    self.inputs[key] = (input, data)
                         
-                if type(input) == QLineEdit:
-                    input.setText(value)
+                elif type(input) == QLineEdit:
+                    input.setText(str(value))
+                    self.inputs[key] = input
 
             self.lay.addWidget(label)
             self.lay.addWidget(input)
+        bs = QWidget()
+        laybs = QHBoxLayout(bs)
+        bAdicionar = QPushButton('Salvar')
+        bAdicionar.clicked.connect(self.getInput)
+        laybs.addWidget(bAdicionar)
+
+        bCancelar = QPushButton('Cancelar')
+        bCancelar.clicked.connect(self.close)
+        laybs.addWidget(bCancelar)
+
+        self.lay.addWidget(bs)
+
+    def getInput(self):
+        output = {}
+        for key in self.dataDict:
+            item = self.inputs[key]
+            append = None
+            if type(item) == tuple:
+                it = item[0]
+                data = item[1]
+                if data == 'date':
+                    t = it.date()
+                    append = t.toPyDate()
+                elif data == int:
+                    if it.hasAcceptableInput() == False:
+                        messagebox(self, 'Entrada não é válida, usar números inteiros')
+                        break
+                    append = int(it.text())
+                elif data == float:
+                    if it.hasAcceptableInput() == False:
+                        messagebox(self, 'Entrada não é válida, usar números decimais')
+                        break
+                    append = float(it.text())
+                elif type(data) == list:
+                    text = it.text()
+                    print(text)
+                    changed = False
+                    for i,t in enumerate(data):
+                        if text == t:
+                            append = i+1
+                            change = True
+                    if not change:
+                        messagebox(self, 'Entrada não é válida, usar medicamento/paciente já existente')
+                    
+            else:
+                append = item.text()
+
+            if append != None:
+                output[key] = append 
+        self.signal.emit(output)
+        print(output)
+        self.close()
 
 def inTupleList(field_name, list, index):
     for i, data in enumerate(list):
@@ -397,12 +519,12 @@ class AdderPopUp(QDialog):
                 elif data == int:
                     if it.hasAcceptableInput() == False:
                         messagebox(self, 'Entrada não é válida, usar números inteiros')
-                        break
+                        return
                     append = int(it.text())
                 elif data == float:
                     if it.hasAcceptableInput() == False:
                         messagebox(self, 'Entrada não é válida, usar números decimais')
-                        break
+                        return
                     append = float(it.text())
                 elif type(data) == list:
                     text = it.text()
@@ -412,10 +534,12 @@ class AdderPopUp(QDialog):
             else:
                 if item.isModified() == False:
                     messagebox(self, 'Por favor preencher todos os campos')
-                    break
+                    return
                 append = item.text()
             output.append(append) 
+        self.signal.emit(output)
         print(output)
+        self.close()
 
 
     def clearLayout(self):
