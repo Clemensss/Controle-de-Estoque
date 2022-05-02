@@ -5,7 +5,7 @@ def populate():
     names = 0
     with open('src/names.txt') as f:
         for line in enumerate(f):
-            addPaciente(line[1][:-1], 'Schrage{}'.format(line[0]))
+            addPaciente(line[1][:-1], 'Albuquerque{}'.format(line[0]))
             names+=1
 
     med = [

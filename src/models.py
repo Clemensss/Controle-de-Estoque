@@ -4,6 +4,7 @@ from email.policy import default
 from pony.orm import *
 from datetime import date
 
+DB_NAME= 'database.sqlite'
 
 db = Database()
 #-------------------------- DATA BASE ------------------------
@@ -144,7 +145,7 @@ class Entrada(db.Entity):
                 self.med.doses = 0
         print('ENTRADA DELETED')
 
-#db.bind(provider='sqlite', filename='database.sqlite', create_db=True)
-db.bind(provider='sqlite', filename=':memory:')
+db.bind(provider='sqlite', filename=DB_NAME, create_db=True)
+#db.bind(provider='sqlite', filename=':memory:')
 db.generate_mapping(create_tables=True)
 

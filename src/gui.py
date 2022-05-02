@@ -1,12 +1,12 @@
-import io
 from tkinter import messagebox
-from unicodedata import name
+import sqlite3
+from xlsxwriter.workbook import Workbook
 from unittest.loader import VALID_MODULE_NAME
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtCore import Qt
-from functools import cached_property
+from models import DB_NAME
 import sip
 import funcoesdb
 import sys
@@ -50,8 +50,7 @@ class  MainWindow(QMainWindow):
 
         tabwizard = TabWizard()
         self.setCentralWidget(tabwizard)
-
-        tabNames = ['Estoque','Entrada','Saida','Pacientes']
+        tabNames = ['Estoque','Entrada','Saída','Pacientes']
         tabs = [
             ListAndInfo(eqMedicamentos,1,funcoesdb.qAllMed),
             TableEstoque( eqEntrada, funcoesdb.qAllChangeEnt),
@@ -116,6 +115,40 @@ class  MainWindow(QMainWindow):
         tabwizard.addPage(Page(tabs[3], BUTTONS, eqPacientes, interfacePac, excludeadd=pacExcludes), tabNames[3])
 
         self.show()
+
+    def _createMenuBar(self):
+        menuBar = self.menuBar()
+        fileMenu = QMenu("&Arquivo", self)
+        menuBar.addMenu(fileMenu)
+        exp = QAction("&Exportar como excel...", self)
+        imp = QAction("&Importar banco...", self)
+        fileMenu.addAction(exp)
+        fileMenu.addAction(imp)
+        exp.triggered.connect(self.exp)
+        imp.triggered.connect(open)
+    def exp(self):
+        fileName = None
+        dialog = QFileDialog(self, "Exportar como excel")
+        dialog.setFileMode(QFileDialog.Directory)
+        if dialog.exec_():
+            fileName = dialog.selectedFiles()
+            self.exp_excel(fileName[0])
+    
+    def exp_excel(self, path):
+        workbook = Workbook('output2.xlsx')
+        worksheet = workbook.add_worksheet()
+        conn=sqlite3.connect('test.sqlite')
+        cursor = conn.cursor() # Create the cursor
+        tables = list(cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")) # Get all table names
+        tables = list(map(lambda x: x[0], tables)) # convert the list of tuple to list of str
+        for table in tables:
+            try: worksheet = workbook.add_worksheet(name=table[0:31]) # Sheet names in excel can have up to 31 chars
+            except:pass
+            for row_number, row in enumerate(cursor.execute('SELECT * FROM '+table)): # row is a tuple here
+                for column_number, item in enumerate(row):
+                    try: worksheet.write(row_number, column_number, item) # Write the cell in the current sheet
+                    except:pass
+        workbook.close()
 
 
 class TabWizard(QTabWidget):
@@ -552,7 +585,7 @@ def messagebox(lay, message):
     m.setText(message)
     m.exec_()
 if __name__ == '__main__':
-    funcoesdb.populate()
+    #funcoesdb.populate()
     app = QApplication(sys.argv)
     app.setApplicationName("Controle de Estoque")
     window = MainWindow()
