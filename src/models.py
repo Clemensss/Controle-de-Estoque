@@ -3,7 +3,7 @@ from decimal import Decimal
 from email.policy import default
 from pony.orm import *
 from datetime import date
-
+import pony.orm.dbproviders.sqlite
 DB_NAME= 'database.sqlite'
 
 db = Database()
